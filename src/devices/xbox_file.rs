@@ -33,22 +33,30 @@ impl XboxFile {
         Ok(buffer)
     }
 
-    fn update(&mut self, packet: &XboxPacket) {
+    fn update(&mut self, packet: &XboxPacket) -> bool {
         if packet.code != 1 && packet.code != 4 {
-            return;
+            return false;
         }
 
-        if let Ok(mut value) = i16::try_from(packet.value * 256 / i16::MAX as i32) {
+        if let Ok(mut value) = i16::try_from(packet.value * 255 / i16::MAX as i32) {
+            // apply dead zone
             if -self.dead_zone < value && value < self.dead_zone {
                 value = 0;
             }
 
-            if packet.code == 1 {
+            // update only if value changes
+            return if packet.code == 1 && self.state.left_thumb != value {
                 self.state.left_thumb = value;
-            } else if packet.code == 4 {
+                true
+            } else if packet.code == 4 && self.state.right_thumb != value {
                 self.state.right_thumb = value;
-            }
+                true
+            } else {
+                false
+            };
         }
+
+        false
     }
 }
 
@@ -76,12 +84,14 @@ impl AsyncRead for XboxFile {
             let mut packet: XboxPacket = transmute(buffer);
 
             // skip "trash?" packets
-            while packet.code == 0 {
+            while packet.code == 0 || !self.update(&packet) {
                 packet = transmute(self.read_buffer()?);
-            }
-            log::debug!("{:?}", packet);
 
-            self.update(&packet);
+                if packet.code != 0 {
+                    log::debug!("{:?}", packet);
+                }
+            }
+
             let ptr = &self.state as *const ControllerState as *const u8;
 
             log::debug!("{:?}", self.state);
