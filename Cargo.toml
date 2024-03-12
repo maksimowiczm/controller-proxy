@@ -1,0 +1,18 @@
+[package]
+name = "controller-controller"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[[bin]]
+name = "controller-controller"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+libc = "0.2.153"
+clap = { version = "4.5.2", features = ["derive"] }
+async-trait = "0.1.77"
+regex = "1.10.3"
+byteorder = "1.5.0"
