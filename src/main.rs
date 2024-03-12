@@ -1,11 +1,11 @@
 use crate::pass_through::PassThrough;
 use clap::{Parser, Subcommand};
-use controller_state::ControllerState;
+use devices::controller_state::ControllerState;
+use devices::xbox_file::XboxFile;
 use log::info;
 use tokio::fs::File;
 use tokio::io::{stdin, stdout, AsyncRead};
 use tokio::net::TcpListener;
-use devices::controller_state::ControllerState;
 
 mod controller_state;
 mod pass_through;
@@ -58,7 +58,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             Some(Box::new(file) as Box<dyn AsyncRead + Unpin>)
         }
-        Some(Commands::USB { .. }) => None,
+        Some(Commands::USB { .. }) => {
+            let xbox_file = XboxFile::create().await?;
+            Some(Box::new(xbox_file) as Box<dyn AsyncRead + Unpin>)
+        }
         None => {
             info!("Using STDIN");
 
