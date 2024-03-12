@@ -1,6 +1,9 @@
 use crate::pass_through::PassThrough;
+use log::{debug, error};
 use std::intrinsics::transmute;
-use std::{io, mem};
+use std::io::{Error, ErrorKind};
+use std::mem;
+use tokio::io;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 #[repr(C)]
@@ -21,7 +24,18 @@ impl PassThrough for ControllerState {
         TWriter: AsyncWrite + Unpin,
     {
         let mut buffer = [0u8; CONTROLLER_STATE_SIZE];
-        reader.read(&mut buffer).await?;
+        let bytes = reader.read(&mut buffer).await?;
+
+        if bytes != CONTROLLER_STATE_SIZE {
+            let message = format!(
+                "Read {bytes} bytes from reader, but it should be {CONTROLLER_STATE_SIZE} bytes."
+            );
+
+            error!("{}", message);
+            return Err(Error::new(ErrorKind::BrokenPipe, message));
+        }
+
+        debug!("buffer = {:?}", std::str::from_utf8(&buffer).unwrap());
 
         unsafe {
             let state: ControllerState = transmute(buffer);
