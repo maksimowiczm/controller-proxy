@@ -9,6 +9,10 @@ edition = "2021"
 name = "controller-controller"
 path = "src/main.rs"
 
+[lib]
+name = "devices"
+path = "src/devices/lib.rs"
+
 [dependencies]
 tokio = { version = "1", features = ["full"] }
 libc = "0.2.153"

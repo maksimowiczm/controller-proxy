@@ -1,4 +1,5 @@
 use crate::pass_through::PassThrough;
+use devices::controller_state::ControllerState;
 use log::{debug, error};
 use std::intrinsics::transmute;
 use std::io::{Error, ErrorKind};
@@ -6,12 +7,6 @@ use std::mem;
 use tokio::io;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
-#[repr(C)]
-#[derive(Debug)]
-pub struct ControllerState {
-    pub left_thumb: i16,
-    pub right_thumb: i16,
-}
 const CONTROLLER_STATE_SIZE: usize = mem::size_of::<ControllerState>();
 
 impl PassThrough for ControllerState {
@@ -35,7 +30,7 @@ impl PassThrough for ControllerState {
             return Err(Error::new(ErrorKind::BrokenPipe, message));
         }
 
-        debug!("buffer = {:?}", std::str::from_utf8(&buffer).unwrap());
+        debug!("buffer = {:?}", buffer);
 
         unsafe {
             let state: ControllerState = transmute(buffer);

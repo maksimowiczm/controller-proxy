@@ -5,6 +5,7 @@ use log::info;
 use tokio::fs::File;
 use tokio::io::{stdin, stdout, AsyncRead};
 use tokio::net::TcpListener;
+use devices::controller_state::ControllerState;
 
 mod controller_state;
 mod pass_through;
