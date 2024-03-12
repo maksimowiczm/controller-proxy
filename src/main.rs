@@ -15,7 +15,7 @@ mod pass_through;
 #[command(version, about, long_about = None)]
 struct Args {
     #[command(subcommand)]
-    command: Option<Commands>,
+    command: Commands,
 }
 
 #[derive(Subcommand)]
@@ -28,12 +28,14 @@ enum Commands {
         port: String,
     },
     /// Use XBOX controller USB event file
-    USB {},
+    USB,
     /// Use file
     FILE {
         /// File path
         path: String,
     },
+    /// Use stdin
+    STDIN,
 }
 
 #[tokio::main]
@@ -43,7 +45,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
     let mut reader: Box<dyn AsyncRead + Unpin> = match args.command {
-        Some(Commands::TCP { ip4, port }) => {
+        Commands::TCP { ip4, port } => {
             let listener = TcpListener::bind(format!("{ip4}:{port}")).await?;
             info!("TCP listening at {ip4}:{port}");
 
@@ -52,17 +54,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             Some(Box::new(stream) as Box<dyn AsyncRead + Unpin>)
         }
-        Some(Commands::FILE { path }) => {
+        Commands::FILE { path } => {
             let file = File::open(path.clone()).await?;
             info!("Reading from file {:?}", path);
 
             Some(Box::new(file) as Box<dyn AsyncRead + Unpin>)
         }
-        Some(Commands::USB { .. }) => {
-            let xbox_file = XboxFile::create().await?;
+        Commands::USB { .. } => {
+            let (xbox_file, path) = XboxFile::create().await?;
+            info!("Using xbox event file {:?}", path);
+
             Some(Box::new(xbox_file) as Box<dyn AsyncRead + Unpin>)
         }
-        None => {
+        Commands::STDIN => {
             info!("Using STDIN");
 
             Some(Box::new(stdin()) as Box<dyn AsyncRead + Unpin>)

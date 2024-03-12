@@ -1,5 +1,6 @@
 use crate::controller_state::ControllerState;
 use crate::devices::Device;
+use filepath::FilePath;
 use regex::Regex;
 use std::fs::File;
 use std::io::Read;
@@ -16,15 +17,19 @@ pub struct XboxFile {
 }
 
 impl XboxFile {
-    pub async fn create() -> Result<Self, Box<dyn std::error::Error>> {
+    pub async fn create() -> Result<(Self, std::path::PathBuf), Box<dyn std::error::Error>> {
         let re_xbox = Regex::new(r"Microsoft (X-Box|Xbox)")?;
         let xbox = Device::from_proc_file(re_xbox)?;
         let event_file = xbox.get_event_handler()?;
-        Ok(XboxFile {
-            event_file,
-            state: ControllerState::default(),
-            dead_zone: 25,
-        })
+        let path = event_file.path()?;
+        Ok((
+            XboxFile {
+                event_file,
+                state: ControllerState::default(),
+                dead_zone: 25,
+            },
+            path,
+        ))
     }
 
     fn read_buffer(&mut self) -> io::Result<[u8; XBOX_PACKET_SIZE]> {
