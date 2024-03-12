@@ -2,7 +2,8 @@ use crate::pass_through::PassThrough;
 use clap::{Parser, Subcommand};
 use controller_state::ControllerState;
 use log::info;
-use tokio::io::{stdout, AsyncRead};
+use tokio::fs::File;
+use tokio::io::{stdin, stdout, AsyncRead};
 use tokio::net::TcpListener;
 
 mod controller_state;
@@ -18,13 +19,20 @@ struct Args {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Use TCP socket
     TCP {
         /// IPv4 socket address
         ip4: String,
         /// Port number
         port: String,
     },
+    /// Use XBOX controller USB event file
     USB {},
+    /// Use file
+    FILE {
+        /// File path
+        path: String,
+    },
 }
 
 #[tokio::main]
@@ -36,14 +44,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut reader: Box<dyn AsyncRead + Unpin> = match args.command {
         Some(Commands::TCP { ip4, port }) => {
             let listener = TcpListener::bind(format!("{ip4}:{port}")).await?;
-            info!("TCP listening on {ip4}:{port}");
+            info!("TCP listening at {ip4}:{port}");
 
             let (stream, address) = listener.accept().await?;
             info!("{address} connected");
 
             Some(Box::new(stream) as Box<dyn AsyncRead + Unpin>)
         }
-        _ => None,
+        Some(Commands::FILE { path }) => {
+            let file = File::open(path.clone()).await?;
+            info!("Reading from file {:?}", path);
+
+            Some(Box::new(file) as Box<dyn AsyncRead + Unpin>)
+        }
+        Some(Commands::USB { .. }) => None,
+        None => {
+            info!("Using STDIN");
+
+            Some(Box::new(stdin()) as Box<dyn AsyncRead + Unpin>)
+        }
     }
     .ok_or("Failed to create input stream")?;
 
