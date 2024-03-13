@@ -3,9 +3,11 @@ use clap::{Parser, Subcommand};
 use devices::controller_state::ControllerState;
 use devices::xbox_file::XboxFile;
 use log::{debug, info};
+use std::time::Duration;
 use tokio::fs::{File, OpenOptions};
 use tokio::io::{stdin, stdout, AsyncRead, AsyncWrite};
 use tokio::net::TcpListener;
+use tokio::time::timeout;
 use tokio_serial::SerialStream;
 
 mod controller_state;
@@ -57,6 +59,8 @@ enum Commands {
     },
     /// Use stdin
     STDIN,
+    /// Auto mode
+    AUTO,
 }
 
 #[tokio::main]
@@ -66,6 +70,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
     let mut output_streams = setup_output_streams(&args).await?;
+
+    if matches!(args.command, Commands::AUTO) {
+        return auto_mode(output_streams).await;
+    }
 
     let mut reader: Box<dyn AsyncRead + Unpin> = match args.command {
         Commands::TCP { ip4, port } => {
@@ -98,6 +106,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             Some(Box::new(stdin()) as Box<dyn AsyncRead + Unpin>)
         }
+        _ => None,
     }
     .ok_or("Failed to create input stream")?;
 
@@ -156,4 +165,55 @@ async fn setup_output_streams(
     }
 
     Ok(output_streams)
+}
+
+async fn auto_mode(
+    mut output_streams: Vec<Box<dyn AsyncWrite + Unpin>>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    info!("Trying to connect to xbox controller");
+
+    let mut xbox_file_result = XboxFile::from_proc_file();
+    if xbox_file_result.is_err() {
+        info!("Could not connect to xbox controller. Trying again in 5 seconds");
+        tokio::time::sleep(Duration::from_secs(5)).await;
+        info!("Trying to connect to xbox controller");
+        xbox_file_result = XboxFile::from_proc_file();
+    }
+
+    let reader = if let Ok((xbox_file, path)) = xbox_file_result {
+        info!("Using xbox event file {:?}", path);
+        Some(Box::new(xbox_file) as Box<dyn AsyncRead + Unpin>)
+    } else {
+        info!("Failed to connect to xbox controller.");
+        info!("Trying TCP connection");
+
+        let listener = TcpListener::bind("0.0.0.0:8080").await?;
+        info!("TCP listening at 0.0.0.0:8080");
+        info!("Waiting for 30 seconds");
+
+        match timeout(Duration::from_secs(30), listener.accept()).await {
+            Ok(result) => match result {
+                Ok((stream, address)) => {
+                    info!("{address} connected");
+                    Some(Box::new(stream) as Box<dyn AsyncRead + Unpin>)
+                }
+                Err(..) => None,
+            },
+            Err(..) => {
+                info!("Connection timeout");
+                None
+            }
+        }
+    };
+
+    if let Some(mut reader) = reader {
+        info!("Starting pass through");
+
+        loop {
+            let binding = output_streams.iter_mut().map(|stream| stream).collect();
+            ControllerState::pass_through(&mut reader, binding).await?;
+        }
+    }
+
+    Ok(())
 }
