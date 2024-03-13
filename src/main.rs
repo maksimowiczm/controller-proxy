@@ -65,6 +65,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let args = Args::parse();
 
+    let mut output_streams = setup_output_streams(&args).await?;
+
     let mut reader: Box<dyn AsyncRead + Unpin> = match args.command {
         Commands::TCP { ip4, port } => {
             let listener = TcpListener::bind(format!("{ip4}:{port}")).await?;
@@ -99,10 +101,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     .ok_or("Failed to create input stream")?;
 
+    info!("Starting pass through");
+
+    loop {
+        let binding = output_streams.iter_mut().map(|stream| stream).collect();
+        ControllerState::pass_through(&mut reader, binding).await?;
+    }
+}
+
+async fn setup_output_streams(
+    args: &Args,
+) -> Result<Vec<Box<dyn AsyncWrite + Unpin>>, Box<dyn std::error::Error>> {
     let mut output_streams = vec![];
 
     // Open output file
-    if let Some(path) = args.file {
+    if let Some(path) = &args.file {
         let file = Box::new(
             OpenOptions::new()
                 .create(true)
@@ -118,13 +131,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     // Open serial
-    if let Some(serial) = args.serial {
+    if let Some(serial) = &args.serial {
         let available_serials = tokio_serial::available_ports()?;
         debug!("Available serial ports: {:?}", available_serials);
 
         if let Ok(_) = available_serials
             .iter()
-            .find(|&info| *info.port_name == serial)
+            .find(|&info| *info.port_name == *serial)
             .ok_or("Could not open the serial")
         {
             let baud_rate = args.baud_rate.unwrap();
@@ -142,10 +155,5 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         info!("Using stdout as output");
     }
 
-    info!("Starting pass through");
-
-    loop {
-        let binding = output_streams.iter_mut().map(|stream| stream).collect();
-        ControllerState::pass_through(&mut reader, binding).await?;
-    }
+    Ok(output_streams)
 }
