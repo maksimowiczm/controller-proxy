@@ -62,6 +62,9 @@ impl XboxFile {
                 value = 0;
             }
 
+            // reverse value because it is reversed
+            value = -value;
+
             // update only if value changes
             return if packet.code == 1 && self.state.left_thumb != value {
                 self.state.left_thumb = value;
