@@ -17,7 +17,20 @@ pub struct XboxFile {
 }
 
 impl XboxFile {
-    pub async fn create() -> Result<(Self, std::path::PathBuf), Box<dyn std::error::Error>> {
+    pub fn from_file(path: &str) -> Result<(Self, std::path::PathBuf), Box<dyn std::error::Error>> {
+        let event_file = File::open(path)?;
+        let path = event_file.path()?;
+
+        Ok((
+            XboxFile {
+                event_file,
+                dead_zone: 25,
+                state: Default::default(),
+            },
+            path,
+        ))
+    }
+    pub fn from_proc_file() -> Result<(Self, std::path::PathBuf), Box<dyn std::error::Error>> {
         let re_xbox = Regex::new(r"Microsoft (X-Box|Xbox)")?;
         let xbox = Device::from_proc_file(re_xbox)?;
         let event_file = xbox.get_event_handler()?;

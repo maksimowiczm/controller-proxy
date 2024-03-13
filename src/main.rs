@@ -28,7 +28,11 @@ enum Commands {
         port: String,
     },
     /// Use XBOX controller USB event file
-    USB,
+    USB {
+        #[arg(long)]
+        /// Path to XBOX controller event file
+        event_file: Option<String>,
+    },
     /// Use file
     FILE {
         /// File path
@@ -60,8 +64,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             Some(Box::new(file) as Box<dyn AsyncRead + Unpin>)
         }
-        Commands::USB { .. } => {
-            let (xbox_file, path) = XboxFile::create().await?;
+        Commands::USB { event_file } => {
+            let (xbox_file, path) = if let Some(path) = event_file {
+                XboxFile::from_file(&path)?
+            } else {
+                XboxFile::from_proc_file()?
+            };
             info!("Using xbox event file {:?}", path);
 
             Some(Box::new(xbox_file) as Box<dyn AsyncRead + Unpin>)
