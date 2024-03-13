@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: controller-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: controller-proxy
+  template:
+    metadata:
+      labels:
+        app: controller-proxy
+    spec:
+      containers:
+        - name: controller-proxy
+          volumeMounts:
+            - mountPath: /dev/input/event18
+              name: dev-input-event
+          image: controller
+          imagePullPolicy: Never
+          resources:
+            limits:
+              memory: "128Mi"
+              cpu: "500m"
+          env:
+            - name: RUST_LOG
+              value: info
+          args: ["usb"]
+          securityContext:
+            privileged: true
+      restartPolicy: Always
+      volumes:
+        - name: dev-input-event
+          hostPath:
+            path: /dev/input/event18
