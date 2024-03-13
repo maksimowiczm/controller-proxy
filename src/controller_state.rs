@@ -1,6 +1,6 @@
 use crate::pass_through::PassThrough;
-use devices::controller_state::ControllerState;
-use log::{debug, error};
+use devices::controller_state::{ArduinoControllerState, ControllerState};
+use log::{debug, error, info};
 use std::intrinsics::transmute;
 use std::io::{Error, ErrorKind};
 use std::mem;
@@ -35,8 +35,19 @@ impl PassThrough for ControllerState {
         unsafe {
             let state: ControllerState = transmute(buffer);
 
+            info!("{:?}", state);
+
+            let arduino_state = ArduinoControllerState::from_controller_state(&state);
+
+            info!("{:?}", arduino_state);
+
+            let bytes: &[u8] = core::slice::from_raw_parts(
+                (&arduino_state as *const ArduinoControllerState) as *const u8,
+                mem::size_of::<ArduinoControllerState>(),
+            );
+
             for writer in writers {
-                writer.write(format!("{:?}\n", state).as_bytes()).await?;
+                writer.write(bytes).await?;
             }
         }
 
