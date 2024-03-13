@@ -12,7 +12,7 @@ const CONTROLLER_STATE_SIZE: usize = mem::size_of::<ControllerState>();
 impl PassThrough for ControllerState {
     async fn pass_through<TWriter, TReader>(
         reader: &mut TReader,
-        writer: &mut TWriter,
+        writers: Vec<&mut TWriter>,
     ) -> io::Result<()>
     where
         TReader: AsyncRead + Unpin,
@@ -34,7 +34,10 @@ impl PassThrough for ControllerState {
 
         unsafe {
             let state: ControllerState = transmute(buffer);
-            writer.write(format!("{:?}\n", state).as_bytes()).await?;
+
+            for writer in writers {
+                writer.write(format!("{:?}\n", state).as_bytes()).await?;
+            }
         }
 
         Ok(())

@@ -2,10 +2,11 @@ use crate::pass_through::PassThrough;
 use clap::{Parser, Subcommand};
 use devices::controller_state::ControllerState;
 use devices::xbox_file::XboxFile;
-use log::info;
-use tokio::fs::File;
-use tokio::io::{stdin, stdout, AsyncRead};
+use log::{debug, info};
+use tokio::fs::{File, OpenOptions};
+use tokio::io::{stdin, stdout, AsyncRead, AsyncWrite};
 use tokio::net::TcpListener;
+use tokio_serial::SerialStream;
 
 mod controller_state;
 mod pass_through;
@@ -16,6 +17,22 @@ mod pass_through;
 struct Args {
     #[command(subcommand)]
     command: Commands,
+
+    #[arg(long, global = true)]
+    /// Write output to file
+    file: Option<String>,
+
+    #[arg(long, global = true)]
+    /// Write output to serial
+    serial: Option<String>,
+
+    #[arg(long, global = true, default_value = "9600")]
+    /// Serial baud rate
+    baud_rate: Option<u32>,
+
+    #[arg(long, global = true)]
+    /// Write to stdout
+    stdout: bool,
 }
 
 #[derive(Subcommand)]
@@ -82,9 +99,53 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     .ok_or("Failed to create input stream")?;
 
+    let mut output_streams = vec![];
+
+    // Open output file
+    if let Some(path) = args.file {
+        let file = Box::new(
+            OpenOptions::new()
+                .create(true)
+                .write(true)
+                .append(true)
+                .open(path.clone())
+                .await?,
+        ) as Box<dyn AsyncWrite + Unpin>;
+
+        output_streams.push(file);
+
+        info!("Opened file {:?} as output", path);
+    };
+
+    // Open serial
+    if let Some(serial) = args.serial {
+        let available_serials = tokio_serial::available_ports()?;
+        debug!("Available serial ports: {:?}", available_serials);
+
+        if let Ok(_) = available_serials
+            .iter()
+            .find(|&info| *info.port_name == serial)
+            .ok_or("Could not open the serial")
+        {
+            let baud_rate = args.baud_rate.unwrap();
+            let builder = tokio_serial::new(serial.clone(), baud_rate);
+            let stream = SerialStream::open(&builder)?;
+            output_streams.push(Box::new(stream) as Box<dyn AsyncWrite + Unpin>);
+
+            info!("Opened serial port {:?} with {baud_rate} baud rate", serial);
+        }
+    }
+
+    if output_streams.is_empty() || args.stdout {
+        output_streams.push(Box::new(stdout()) as Box<dyn AsyncWrite + Unpin>);
+
+        info!("Using stdout as output");
+    }
+
     info!("Starting pass through");
 
     loop {
-        ControllerState::pass_through(&mut reader, &mut stdout()).await?;
+        let binding = output_streams.iter_mut().map(|stream| stream).collect();
+        ControllerState::pass_through(&mut reader, binding).await?;
     }
 }
