@@ -60,7 +60,11 @@ enum Commands {
     /// Use stdin
     STDIN,
     /// Auto mode
-    AUTO,
+    AUTO {
+        #[arg(long = "loop", short = 'l')]
+        /// Loop auto mode
+        loop_mode: bool,
+    },
 }
 
 #[tokio::main]
@@ -71,8 +75,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut output_streams = setup_output_streams(&args).await?;
 
-    if matches!(args.command, Commands::AUTO) {
-        return auto_mode(output_streams).await;
+    if let Commands::AUTO { loop_mode } = args.command {
+        info!("Starting auto mode");
+
+        if !loop_mode {
+            return auto_mode(&mut output_streams).await;
+        }
+
+        info!("Starting loop");
+
+        loop {
+            let _ = auto_mode(&mut output_streams).await;
+            info!("Trying again...")
+        }
     }
 
     let mut reader: Box<dyn AsyncRead + Unpin> = match args.command {
@@ -168,15 +183,15 @@ async fn setup_output_streams(
 }
 
 async fn auto_mode(
-    mut output_streams: Vec<Box<dyn AsyncWrite + Unpin>>,
+    output_streams: &mut Vec<Box<dyn AsyncWrite + Unpin>>,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    info!("Trying to connect to xbox controller");
+    info!("Trying to connect to xbox controller via usb");
 
     let mut xbox_file_result = XboxFile::from_proc_file();
     if xbox_file_result.is_err() {
-        info!("Could not connect to xbox controller. Trying again in 5 seconds");
+        info!("Could not connect to xbox controller, trying again in 5 seconds");
         tokio::time::sleep(Duration::from_secs(5)).await;
-        info!("Trying to connect to xbox controller");
+        info!("Trying to connect to xbox controller via usb");
         xbox_file_result = XboxFile::from_proc_file();
     }
 
@@ -184,7 +199,7 @@ async fn auto_mode(
         info!("Using xbox event file {:?}", path);
         Some(Box::new(xbox_file) as Box<dyn AsyncRead + Unpin>)
     } else {
-        info!("Failed to connect to xbox controller.");
+        info!("Failed to connect to xbox controller");
         info!("Trying TCP connection");
 
         let listener = TcpListener::bind("0.0.0.0:8080").await?;
