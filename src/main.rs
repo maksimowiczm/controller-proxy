@@ -59,7 +59,7 @@ enum Commands {
     },
     /// Use stdin
     STDIN,
-    /// Auto mode
+    /// Auto mode will atempt to use either USB controller or a TCP socket
     AUTO {
         #[arg(long = "loop", short = 'l')]
         /// Loop auto mode
