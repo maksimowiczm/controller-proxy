@@ -14,8 +14,10 @@ pub struct ArduinoControllerState {
 
 impl ArduinoControllerState {
     pub fn from_controller_state(state: &ControllerState) -> Self {
-        let left_thumb = i8::try_from(state.left_thumb * 128 / 256i16).unwrap();
-        let right_thumb = i8::try_from(state.right_thumb * 128 / 256i16).unwrap();
+        let left_thumb =
+            i8::try_from(state.left_thumb.checked_mul(128).unwrap_or(0) / 1256i16).unwrap_or(0);
+        let right_thumb =
+            i8::try_from(state.right_thumb.checked_mul(128).unwrap_or(0) / 1256i16).unwrap_or(0);
 
         ArduinoControllerState {
             left_thumb,
